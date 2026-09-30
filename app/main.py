@@ -3,11 +3,18 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from structlog.contextvars import bind_contextvars
 
 from .agent import LabAgent
+from .dashboard import get_dashboard_metrics
 from .incidents import disable, enable, status
 from .logging_config import configure_logging, get_logger
 from .metrics import record_error, snapshot
@@ -46,11 +53,32 @@ async def metrics() -> dict:
     return snapshot()
 
 
+DASHBOARD_HTML_PATH = Path(__file__).parent / "dashboard.html"
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page() -> HTMLResponse:
+    if DASHBOARD_HTML_PATH.exists():
+        return HTMLResponse(content=DASHBOARD_HTML_PATH.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Dashboard HTML not found</h1>", status_code=404)
+
+
+@app.get("/api/dashboard-metrics")
+async def dashboard_metrics() -> dict:
+    return get_dashboard_metrics()
+
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
-    # TODO: Enrich logs with request context (user_id_hash, session_id, feature, model, env)
-    # bind_contextvars(...)
-    
+    bind_contextvars(
+        user_id_hash=hash_user_id(body.user_id),
+        session_id=body.session_id,
+        feature=body.feature,
+        model=agent.model,
+        env=os.getenv("APP_ENV", "dev"),
+    )
+
     log.info(
         "request_received",
         service="api",
@@ -75,6 +103,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             quality_score=result.quality_score,
             tool_name="retrieval",
             tool_success=True,
+            trace_id=result.trace_id,
             payload={"answer_preview": summarize_text(result.answer)},
         )
         return ChatResponse(

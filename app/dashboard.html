@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K4-L3B Day 13 Monitoring & LLMOps Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0b0f17;
+      --bg-surface: #111827;
+      --bg-card: #1a2234;
+      --border: #2d3748;
+      --border-focus: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-blue: #38bdf8;
+      --accent-purple: #a855f7;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-cyan: #06b6d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, sans-serif;
+      padding: 24px;
+      min-height: 100vh;
+    }
+    .header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #38bdf8 0%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header-meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .btn {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { background: #253047; border-color: var(--accent-blue); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 20px;
+    }
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .panel-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .panel-unit {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--accent-blue);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .threshold-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--accent-red);
+      background: rgba(239, 68, 68, 0.1);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      margin-top: 4px;
+    }
+    .stat-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .stat-box {
+      background: var(--bg-card);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 10px 14px;
+      flex: 1;
+      min-width: 100px;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .chart-container {
+      position: relative;
+      height: 220px;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div>
+      <h1>K4-L3B Day 13 Monitoring & LLMOps</h1>
+      <div class="header-meta">
+        <span class="badge">● 6/6 Panels Live</span>
+        <span>Time Range: <strong>60 Minutes</strong></span>
+        <span>Refresh: <strong>30s</strong></span>
+        <span>Source: <strong>data/logs.jsonl</strong></span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <button class="btn" onclick="fetchMetrics()">↻ Refresh Now</button>
+      <button class="btn" onclick="window.print()">📷 Print / Screenshot</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- Panel 1: Latency -->
+    <div class="panel" id="panel-latency">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">1. Latency Percentiles and TTFT</div>
+          <div class="threshold-tag">Threshold: P95 &le; 3000 ms</div>
+        </div>
+        <div class="panel-unit">unit: ms</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">P50 Latency</div><div class="stat-val" id="lat-p50">--</div></div>
+        <div class="stat-box"><div class="stat-label">P95 Latency</div><div class="stat-val" id="lat-p95" style="color: var(--accent-blue);">--</div></div>
+        <div class="stat-box"><div class="stat-label">P99 Latency</div><div class="stat-val" id="lat-p99">--</div></div>
+        <div class="stat-box"><div class="stat-label">TTFT P95</div><div class="stat-val" id="lat-ttft">--</div></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-latency"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 2: Traffic -->
+    <div class="panel" id="panel-traffic">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">2. Request Traffic</div>
+          <div class="threshold-tag">Threshold: Rate &ge; 1 req/min</div>
+        </div>
+        <div class="panel-unit">unit: requests_per_minute</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">Total Requests</div><div class="stat-val" id="traf-total">--</div></div>
+        <div class="stat-box"><div class="stat-label">Rate / Min</div><div class="stat-val" id="traf-rate" style="color: var(--accent-cyan);">--</div></div>
+        <div class="stat-box"><div class="stat-label">Guardrail Status</div><div class="stat-val" id="traf-status" style="color: var(--accent-green);">PASS</div></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-traffic"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 3: Errors -->
+    <div class="panel" id="panel-errors">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">3. Error Rate and Retrieval Success</div>
+          <div class="threshold-tag">Threshold: Error &le; 2% | Retrieval &ge; 90%</div>
+        </div>
+        <div class="panel-unit">unit: percent</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">Error Rate</div><div class="stat-val" id="err-rate" style="color: var(--accent-green);">0.0%</div></div>
+        <div class="stat-box"><div class="stat-label">Retrieval Success</div><div class="stat-val" id="ret-success" style="color: var(--accent-blue);">100%</div></div>
+        <div class="stat-box"><div class="stat-label">Failed Count</div><div class="stat-val" id="err-count">0</div></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-errors"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 4: Cost -->
+    <div class="panel" id="panel-cost">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">4. Cost Over Time</div>
+          <div class="threshold-tag">Threshold: Total &le; 2.50 USD</div>
+        </div>
+        <div class="panel-unit">unit: usd</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">Total Cost</div><div class="stat-val" id="cost-total" style="color: var(--accent-amber);">$0.000</div></div>
+        <div class="stat-box"><div class="stat-label">Daily Budget</div><div class="stat-val">$2.500</div></div>
+        <div class="stat-box"><div class="stat-label">Budget Remaining</div><div class="stat-val" id="cost-rem" style="color: var(--accent-green);">$2.500</div></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-cost"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 5: Tokens -->
+    <div class="panel" id="panel-tokens">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">5. Input and Output Tokens</div>
+          <div class="threshold-tag">Threshold: Total &le; 50,000 tokens</div>
+        </div>
+        <div class="panel-unit">unit: tokens</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">Tokens In</div><div class="stat-val" id="tok-in">--</div></div>
+        <div class="stat-box"><div class="stat-label">Tokens Out</div><div class="stat-val" id="tok-out">--</div></div>
+        <div class="stat-box"><div class="stat-label">Total Tokens</div><div class="stat-val" id="tok-total" style="color: var(--accent-purple);">--</div></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-tokens"></canvas>
+      </div>
+    </div>
+
+    <!-- Panel 6: Quality -->
+    <div class="panel" id="panel-quality">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">6. Quality Proxy</div>
+          <div class="threshold-tag">Threshold: Mean &ge; 0.75 / 1.0</div>
+        </div>
+        <div class="panel-unit">unit: score_0_to_1</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-label">Average Quality</div><div class="stat-val" id="qual-mean" style="color: var(--accent-cyan);">--</div></div>
+        <div class="stat-box"><div class="stat-label">Target Quality</div><div class="stat-val">&ge; 0.75</div></div>
+        <div class="stat-box"><div class="stat-label">Status</div><div class="stat-val" id="qual-status" style="color: var(--accent-green);">PASS</div></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart-quality"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let charts = {};
+
+    async function fetchMetrics() {
+      try {
+        const res = await fetch('/api/dashboard-metrics');
+        const data = await res.json();
+        renderDashboard(data);
+      } catch (err) {
+        console.error('Error fetching dashboard metrics:', err);
+      }
+    }
+
+    function renderDashboard(data) {
+      // 1. Latency
+      document.getElementById('lat-p50').textContent = data.latency.p50 + ' ms';
+      document.getElementById('lat-p95').textContent = data.latency.p95 + ' ms';
+      document.getElementById('lat-p99').textContent = data.latency.p99 + ' ms';
+      document.getElementById('lat-ttft').textContent = data.latency.ttft_p95 + ' ms';
+
+      renderLineChart('chart-latency', data.latency.timeline.labels, [
+        { label: 'P95 Latency (ms)', data: data.latency.timeline.p95, borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', tension: 0.3 }
+      ], 3000, 'Threshold 3000ms');
+
+      // 2. Traffic
+      document.getElementById('traf-total').textContent = data.traffic.count;
+      document.getElementById('traf-rate').textContent = data.traffic.rate_per_minute + ' req/m';
+      renderBarChart('chart-traffic', data.traffic.timeline.labels, [
+        { label: 'Requests / Minute', data: data.traffic.timeline.values, backgroundColor: '#06b6d4' }
+      ], 1, 'Threshold 1 req/m');
+
+      // 3. Errors
+      document.getElementById('err-rate').textContent = data.errors.error_rate_pct + '%';
+      document.getElementById('ret-success').textContent = data.errors.tool_success_rate_pct + '%';
+      document.getElementById('err-count').textContent = data.summary.failed_requests;
+      renderBarChart('chart-errors', ['Error Rate (%)', 'Retrieval Success (%)'], [
+        { label: 'Observed Rate (%)', data: [data.errors.error_rate_pct, data.errors.tool_success_rate_pct], backgroundColor: ['#ef4444', '#22c55e'] }
+      ], 2, 'Error Threshold 2%');
+
+      // 4. Cost
+      document.getElementById('cost-total').textContent = '$' + data.cost.total.toFixed(4);
+      const rem = Math.max(0, 2.5 - data.cost.total);
+      document.getElementById('cost-rem').textContent = '$' + rem.toFixed(4);
+      renderLineChart('chart-cost', data.cost.timeline.labels, [
+        { label: 'Cost / Minute ($)', data: data.cost.timeline.values, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', tension: 0.3 }
+      ], 2.5, 'Budget Limit $2.50');
+
+      // 5. Tokens
+      document.getElementById('tok-in').textContent = data.tokens.tokens_in.toLocaleString();
+      document.getElementById('tok-out').textContent = data.tokens.tokens_out.toLocaleString();
+      document.getElementById('tok-total').textContent = data.tokens.total_tokens.toLocaleString();
+      renderBarChart('chart-tokens', ['Tokens In', 'Tokens Out', 'Total Tokens'], [
+        { label: 'Token Count', data: [data.tokens.tokens_in, data.tokens.tokens_out, data.tokens.total_tokens], backgroundColor: ['#38bdf8', '#a855f7', '#06b6d4'] }
+      ], 50000, 'Threshold 50k Tokens');
+
+      // 6. Quality
+      document.getElementById('qual-mean').textContent = data.quality.mean.toFixed(2);
+      renderLineChart('chart-quality', data.quality.timeline.labels, [
+        { label: 'Quality Score (0-1)', data: data.quality.timeline.values, borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', tension: 0.3 }
+      ], 0.75, 'SLO Quality 0.75');
+    }
+
+    function renderLineChart(canvasId, labels, datasets, thresholdVal, thresholdLabel) {
+      if (charts[canvasId]) charts[canvasId].destroy();
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      charts[canvasId] = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8' } },
+            annotation: {
+              annotations: {
+                threshold: {
+                  type: 'line',
+                  yMin: thresholdVal,
+                  yMax: thresholdVal,
+                  borderColor: '#ef4444',
+                  borderWidth: 2,
+                  borderDash: [6, 6],
+                  label: {
+                    display: true,
+                    content: thresholdLabel,
+                    position: 'end',
+                    color: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                    font: { size: 10, weight: 'bold' }
+                  }
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: '#64748b', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+    }
+
+    function renderBarChart(canvasId, labels, datasets, thresholdVal, thresholdLabel) {
+      if (charts[canvasId]) charts[canvasId].destroy();
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      charts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8' } },
+            annotation: {
+              annotations: {
+                threshold: {
+                  type: 'line',
+                  yMin: thresholdVal,
+                  yMax: thresholdVal,
+                  borderColor: '#ef4444',
+                  borderWidth: 2,
+                  borderDash: [6, 6],
+                  label: {
+                    display: true,
+                    content: thresholdLabel,
+                    position: 'end',
+                    color: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                    font: { size: 10, weight: 'bold' }
+                  }
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+    }
+
+    // Auto-refresh every 30 seconds
+    fetchMetrics();
+    setInterval(fetchMetrics, 30000);
+  </script>
+</body>
+</html>
